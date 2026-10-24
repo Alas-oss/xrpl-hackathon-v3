@@ -1,0 +1,9 @@
+data/raw/
+data/processed/
+outputs/*.zip
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+.env
+*access*code*
+.venv/
