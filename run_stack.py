@@ -1,14 +1,3 @@
-"""Multi-pass neighbour stacking + ensemble  ->  outputs/predictions.csv
-
-    python run_stack.py                          # nested grouped CV on train, then predict test-data/
-    python run_stack.py --no-cv                  # skip CV, just predict
-    python run_stack.py --nb win,link            # only some neighbour groups (win,pair,prov,link,clu)
-    python run_stack.py --passes 2               # 2 = same depth as stacking.py, 3 = one extra pass
-    python run_stack.py --cv-only                # report CV, do not write predictions
-
-The CV prints AP*100 for every pass and for each member of the final ensemble, so the
-CV (not the leaderboard) decides which setting to submit.
-"""
 import argparse
 import importlib
 import sys
