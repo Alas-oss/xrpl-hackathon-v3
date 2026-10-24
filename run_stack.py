@@ -10,6 +10,7 @@ The CV prints AP*100 for every pass and for each member of the final ensemble, s
 CV (not the leaderboard) decides which setting to submit.
 """
 import argparse
+import importlib
 import sys
 import time
 from pathlib import Path
@@ -34,15 +35,28 @@ def main():
     ap.add_argument("--cv-only", action="store_true")
     ap.add_argument("--no-ens", action="store_true", help="skip HistGradientBoosting / ExtraTrees")
     ap.add_argument("--refresh", action="store_true")
+    ap.add_argument("--extra", default="", help="extra feature modules, e.g. features_fine (not cached)")
+    ap.add_argument("--drop", default="", help="feature columns to remove, e.g. hour_sin,hour_cos,is_night")
     a = ap.parse_args()
+    extra = [m for m in a.extra.split(",") if m]
+    drop = [c for c in a.drop.split(",") if c]
     groups = tuple(g for g in a.nb.split(",") if g)
     assert set(groups) <= set(st2.ALL_GROUPS), f"--nb must be a subset of {st2.ALL_GROUPS}"
     test_dir = Path(a.test) if a.test else (TEST_DIR if (TEST_DIR / "transactions.parquet").exists() else VALID_DIR)
     if test_dir == VALID_DIR and not a.cv_only:
         print("!! No test-data/ found: using the UNLABELLED validation split as a stand-in. Do not upload this CSV.")
 
+    def with_extras(base, F):
+        """Append --extra modules and remove --drop columns (same recipe for train and test)."""
+        if extra:
+            F = pd.concat([F] + [importlib.import_module(m).build(base).set_axis(F.index) for m in extra], axis=1)
+        missing = [c for c in drop if c not in F.columns]
+        assert not missing, f"--drop names not in the features: {missing}"
+        return F.drop(columns=drop)
+
     base, F = features_for(a.train, "train", a.refresh)
-    lab = pd.read_csv(Path(a.train) / "labels.csv").set_index(ID_COL).loc[F.index]
+    F = with_extras(base, F)
+    lab =pd.read_csv(Path(a.train) / "labels.csv").set_index(ID_COL).loc[F.index]
     y = lab[LABEL_COL].to_numpy().astype(int)
     X = F.to_numpy()
     groups_cv = lab.scenario_id.fillna("sender_" + base.set_index(ID_COL).loc[F.index].sender).to_numpy()
@@ -81,7 +95,7 @@ def main():
     if a.cv_only:
         return
     base_te, Ft = features_for(test_dir, test_dir.name, a.refresh)
-    Ft = Ft[F.columns]
+    Ft = with_extras(base_te, Ft)[F.columns]
     ctx_te = st2.Ctx(base_te)
     fz = st2.final_featuriser(X, ctx, Ft.to_numpy(), ctx_te, groups)
     pp, fin = st2.run_passes(X, y, groups_cv, Ft.to_numpy(), fz, a.passes, ensemble=not a.no_ens)
